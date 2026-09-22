@@ -1,0 +1,15 @@
+.gcloudignore
+.git
+.git/**
+#!include:.gitignore
+.deploy
+.deploy/**
+infra
+infra/**
+artifacts
+artifacts/**
+.agents
+.agents/**
+.codex
+.codex/**
+**/__pycache__/**

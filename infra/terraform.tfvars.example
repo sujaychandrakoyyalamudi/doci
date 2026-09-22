@@ -1,0 +1,12 @@
+project_id = "your-gcp-project"
+region     = "us-central1"
+name       = "doci"
+
+# First apply provisions supporting services. Build the image, then enable the app.
+deploy_app        = false
+container_image   = ""
+firebase_api_key  = ""
+allow_public_app  = false
+enable_langsmith  = false
+enable_a2a_reviewer = false
+# Keep deletion protection and HA enabled for real environments.

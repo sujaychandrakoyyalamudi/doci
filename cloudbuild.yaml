@@ -1,0 +1,27 @@
+substitutions:
+  _REGION: us-central1
+  _SERVICE: doci
+  _REPOSITORY: doci
+steps:
+  - id: backend-checks
+    name: python:3.12-slim
+    entrypoint: bash
+    args: ['-c', 'pip install uv==0.11.18 && uv sync --frozen --all-extras && uv run ruff check backend && uv run pytest -q']
+  - id: frontend-build
+    name: node:22-bookworm-slim
+    entrypoint: bash
+    args: ['-c', 'cd frontend && npm ci && npm run build']
+  - id: image
+    name: gcr.io/cloud-builders/docker
+    args: ['build', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/app:$BUILD_ID', '.']
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/app:$BUILD_ID']
+  - id: deploy-existing-service
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args: ['run', 'deploy', '${_SERVICE}', '--image', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/app:$BUILD_ID', '--region', '${_REGION}', '--quiet']
+images: ['${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/app:$BUILD_ID']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1800s

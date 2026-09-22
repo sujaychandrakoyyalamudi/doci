@@ -1,0 +1,57 @@
+[project]
+name = "doci"
+version = "0.1.0"
+description = "Evidence-led document review and human-approved case resolution"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+  "sqlalchemy>=2.0.38,<3",
+  "pydantic-settings>=2.8,<3",
+  "python-multipart>=0.0.20,<1",
+  "pypdf>=5.4,<7",
+  "langchain>=1.0,<2",
+  "langchain-google-genai>=4.0,<5",
+  "langchain-text-splitters>=1.0,<2",
+  "langgraph>=1.0,<2",
+  "langgraph-checkpoint-sqlite>=3.0,<4",
+  "langgraph-checkpoint-postgres>=3.0,<4",
+  "langsmith>=0.4,<1",
+  "psycopg[binary,pool]>=3.2,<4",
+  "pgvector>=0.4,<1",
+  "httpx>=0.28,<1",
+]
+
+[project.optional-dependencies]
+gcp = [
+  "google-cloud-storage>=3.0,<4",
+  "google-cloud-documentai>=3.0,<4",
+  "google-cloud-tasks>=2.19,<3",
+  "firebase-admin>=6.7,<8",
+  "opentelemetry-api>=1.30,<2",
+  "opentelemetry-sdk>=1.30,<2",
+  "opentelemetry-instrumentation-fastapi>=0.51b0,<1",
+  "opentelemetry-exporter-gcp-trace>=1.9,<2",
+]
+integrations = ["mcp>=1.12,<2", "a2a-sdk[http-server]>=0.3,<1", "neo4j>=5.28,<7"]
+
+[dependency-groups]
+dev = ["pytest>=8.3,<10", "ruff>=0.11,<1", "pytest-cov>=6,<8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/doci"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "B008"]

@@ -180,9 +180,9 @@ Production configuration requires Firebase authentication, Vertex AI, PostgreSQL
 
 Administrators can open **Monitoring** in the workspace to access LangSmith and the GCP production dashboard. Newly traced cases include a direct link to their latest execution trace.
 
-![Doci Monitoring page showing enabled LangSmith tracing, hidden document content, and access to the GCP production health dashboard.](docs/images/observability.jpg)
+![LangSmith waterfall trace for a Doci review, showing evidence retrieval, Gemini calls, independent review, human approval, and feedback with hidden inputs and outputs.](docs/images/langsmith-trace.jpg)
 
-*The Monitoring workspace brings agent observability and production health together.*
+*Agent execution timings and review feedback in LangSmith. Document inputs and outputs are hidden.*
 
 LangSmith captures graph/model timing, token usage, review correlation, and numeric citation/reviewer feedback while withholding document inputs, outputs, serialized payloads, and exception bodies. Execution and approval-resumption traces share a review ID. Human waiting time is excluded from execution latency; model cost estimates depend on available LangSmith pricing.
 

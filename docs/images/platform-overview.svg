@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="608" viewBox="0 0 1200 608" role="img" aria-labelledby="title description">
+  <title id="title">Doci platform overview</title>
+  <desc id="description">The React and FastAPI workspace connects to a durable LangGraph review workflow using LangChain and Gemini. LangSmith provides agent tracing, while Google Cloud Monitoring provides service health. Cloud Run, Cloud Tasks, Cloud SQL, and Cloud Storage support the platform. Production traces hide document inputs and outputs.</desc>
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fafafa"/>
+      <stop offset="1" stop-color="#ededee"/>
+    </linearGradient>
+    <linearGradient id="engine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3f3f46"/>
+      <stop offset="1" stop-color="#27272a"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="#71717a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+      .eyebrow { font-size: 14px; font-weight: 650; letter-spacing: 2px; fill: #52525b; }
+      .title { font-size: 36px; font-weight: 650; letter-spacing: -1px; fill: #27272a; }
+      .subtitle { font-size: 20px; fill: #52525b; }
+      .heading { font-size: 27px; font-weight: 650; letter-spacing: -.5px; fill: #27272a; }
+      .body { font-size: 20px; fill: #52525b; }
+      .small { font-size: 17px; fill: #52525b; }
+      .icon { fill: none; stroke: #52525b; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect x="1" y="1" width="1198" height="606" rx="24" fill="url(#canvas)" stroke="#d4d4d8"/>
+  <g transform="translate(40 32)" fill="none" stroke="#3f3f46" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 0h14l7 7v23H3z"/>
+    <path d="M17 0v8h7M9 19l4 4 8-9"/>
+  </g>
+  <text x="81" y="54" class="eyebrow">DOCI / PLATFORM AT A GLANCE</text>
+  <text x="40" y="105" class="title">A clear path from evidence to decision.</text>
+  <text x="40" y="138" class="subtitle">One workspace. Durable reviews. Visibility at every step.</text>
+
+  <!-- Workspace -->
+  <rect x="40" y="178" width="350" height="290" rx="16" fill="#fff" stroke="#d4d4d8"/>
+  <text x="64" y="210" class="eyebrow">WORKSPACE</text>
+  <text x="64" y="248" class="heading">React + FastAPI</text>
+  <text x="64" y="281" class="body">Cases, evidence and approvals</text>
+  <rect x="64" y="308" width="302" height="103" rx="10" fill="#fafafa" stroke="#e4e4e7"/>
+  <path d="M64 337h302M123 337v74" stroke="#e4e4e7"/>
+  <circle cx="79" cy="323" r="3" fill="#a1a1aa"/>
+  <circle cx="91" cy="323" r="3" fill="#a1a1aa"/>
+  <circle cx="103" cy="323" r="3" fill="#a1a1aa"/>
+  <rect x="78" y="352" width="31" height="6" rx="3" fill="#71717a"/>
+  <rect x="78" y="367" width="23" height="5" rx="2.5" fill="#d4d4d8"/>
+  <rect x="78" y="381" width="27" height="5" rx="2.5" fill="#d4d4d8"/>
+  <g fill="#f4f4f5" stroke="#d4d4d8">
+    <rect x="139" y="351" width="60" height="43" rx="5"/>
+    <rect x="211" y="351" width="60" height="43" rx="5"/>
+    <rect x="283" y="351" width="66" height="43" rx="5"/>
+  </g>
+  <path d="M150 363h15M150 378h34M222 363h15M222 378h34M294 363h15M294 378h37" stroke="#a1a1aa" stroke-width="3" stroke-linecap="round"/>
+  <text x="64" y="443" class="small">Authenticated access · cited sources</text>
+
+  <path d="M395 324h21" fill="none" stroke="#71717a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Durable agent workflow -->
+  <rect x="425" y="178" width="350" height="290" rx="16" fill="url(#engine)"/>
+  <text x="449" y="210" class="eyebrow" style="fill:#d4d4d8">REVIEW ENGINE</text>
+  <text x="449" y="248" class="heading" style="fill:#fff">LangGraph + LangChain</text>
+  <text x="449" y="281" class="body" style="fill:#e4e4e7">Gemini analysis and review</text>
+  <path d="M463 315v81" fill="none" stroke="#71717a" stroke-width="2"/>
+  <g fill="#3f3f46" stroke="#d4d4d8" stroke-width="2">
+    <circle cx="463" cy="317" r="6"/>
+    <circle cx="463" cy="355" r="6"/>
+    <circle cx="463" cy="393" r="6"/>
+  </g>
+  <g class="body" style="fill:#f4f4f5">
+    <text x="483" y="324">Retrieve evidence</text>
+    <text x="483" y="362">Analyze and review</text>
+    <text x="483" y="400">Wait for human approval</text>
+  </g>
+  <text x="449" y="443" class="small" style="fill:#d4d4d8">Durable checkpoints · bounded retries</text>
+
+  <path d="M780 324h21" fill="none" stroke="#71717a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Agent and infrastructure observability -->
+  <rect x="810" y="178" width="350" height="290" rx="16" fill="#fff" stroke="#d4d4d8"/>
+  <text x="834" y="210" class="eyebrow">OBSERVABILITY</text>
+  <text x="834" y="248" class="heading">LangSmith</text>
+  <text x="834" y="281" class="body">Graph traces, model usage</text>
+  <text x="834" y="309" class="body">and review feedback</text>
+  <path d="M834 331h302" stroke="#e4e4e7"/>
+  <text x="834" y="370" class="heading">Cloud Monitoring</text>
+  <text x="834" y="403" class="body">Uptime, latency, errors</text>
+  <text x="834" y="431" class="body">and task backlog</text>
+
+  <!-- Shared hosting and persistence -->
+  <rect x="40" y="494" width="1120" height="67" rx="14" fill="#fff" stroke="#d4d4d8"/>
+  <g class="icon" transform="translate(62 511)">
+    <path d="M7 27a8 8 0 0 1-1-16 11 11 0 0 1 21-3 9 9 0 0 1 3 19z"/>
+  </g>
+  <text x="111" y="536" class="heading" style="font-size:23px">Google Cloud</text>
+  <path d="M286 511v33" stroke="#e4e4e7"/>
+  <text x="308" y="535" class="body">Cloud Run · Cloud Tasks · Cloud SQL · Cloud Storage</text>
+  <text x="600" y="589" class="small" text-anchor="middle">Production traces hide document inputs and outputs.</text>
+</svg>

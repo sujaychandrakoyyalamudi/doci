@@ -49,6 +49,30 @@ All finding citations must exist in the run's evidence snapshot. This is a prove
 
 The optional A2A reviewer receives only the evidence snapshot and proposal. It has no case-management tools. MCP calls the same role/tenant-enforcing API and exposes no approval creation tool. Optional Neo4j results are filtered again through the authoritative SQL scope.
 
+## Agents and tool boundaries
+
+The built-in workflow has two model chains: the case analyst and independent reviewer. Both use LangChain with Gemini structured output. Evidence retrieval, citation validation, approval persistence, and action execution are Python services invoked by LangGraph nodes. No MCP business tools are bound to the model chains.
+
+| Workflow component | Actual call | Boundary |
+| --- | --- | --- |
+| Evidence step | `DocumentService.search(tenant_id, case_id, query)` | Searches case evidence and the tenant's policy library using scoped retrieval. |
+| Analyst chain | `Agents.analyze(state)` → Gemini with the `Analysis` schema | Receives case context, evidence, and revision feedback; returns findings and a proposed action. |
+| Independent review | `citation_errors(...)`, source checks, then `Agents.review(...)` when eligible | Missing sources escalate; invalid citations request revision. The model checks eligible proposals against their evidence. |
+| Optional remote review | `remote_review(...)` over A2A | Delegates the evidence/analysis payload to a private reviewer service when configured. |
+| Human checkpoint | `interrupt(...)`, persisted `Decision`, `Command(resume=...)` | Pauses until the API stores an independent decision, then verifies its proposal hash on resume. |
+| Internal action | `Workflow.apply_action(state)` | Rechecks authorization and records the action in one transaction; a unique run ID prevents duplicate action records. |
+
+The stdio [MCP integration](../backend/doci/integrations/mcp_server.py) exposes four tools to authorized external clients:
+
+| MCP tool | API call | Effect |
+| --- | --- | --- |
+| `read_case` | `GET /api/cases/{case_id}` | Read the case, evidence snapshot, review, and human decision. |
+| `search_evidence` | `GET /api/cases/{case_id}/search` | Search authorized case documents and published policies. |
+| `request_review` | `POST /api/cases/{case_id}/reviews` | Queue a new review, subject to role and case-state checks. |
+| `retry_approved_action` | Read the case, then `POST /api/runs/{run_id}/retry` | Require an existing approval before retrying the current run. It cannot create a human approval. |
+
+LangSmith observes executions and receives review feedback. Cloud Logging, Cloud Trace, and Cloud Monitoring provide operational visibility. These integrations do not grant model chains permission to approve or execute actions.
+
 ## Deployment shape
 
 The first version intentionally uses a modular Python service. The same Cloud Run container serves static frontend assets, public authenticated API routes, and an OIDC-protected task endpoint. Cloud Tasks provides durable delivery; an optional A2A reviewer runs in a separate private service. This avoids distributed write transactions while preserving the service boundaries in the design.

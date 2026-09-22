@@ -8,6 +8,8 @@ Doci turns uploaded documents and review policies into cited findings, an indepe
 
 [Getting started](#getting-started) · [Using the workspace](#using-the-workspace) · [Architecture](docs/ARCHITECTURE.md) · [GCP deployment](docs/DEPLOYMENT.md) · [Monitoring](docs/OBSERVABILITY.md) · [Operational scope](docs/OPERATIONS.md)
 
+![Doci platform: the React and FastAPI workspace connects to a LangGraph review workflow, with LangSmith agent tracing and Google Cloud Monitoring.](docs/images/platform-overview.svg)
+
 ## What you can do
 
 - **Manage cases:** create reviews, set priorities, search your casework, and follow progress.
@@ -23,21 +25,44 @@ The interface uses neutral gray surfaces, readable text, visible focus states, a
 ## How a review works
 
 ```mermaid
-flowchart LR
-    A[Create a case] --> B[Upload evidence]
-    B --> C[Retrieve evidence and policy]
-    C --> D[Analyze and cite findings]
-    D --> E[Independent review]
-    E -->|Revise| D
-    E -->|Unresolved gap| F[Escalate]
-    E -->|Pass| G[Wait for human decision]
-    G -->|Approve| H[Record internal outcome]
-    G -->|Reject| I[Record rejection]
+flowchart TD
+    Intake["Create case + upload documents"] --> Review
+    subgraph Review["LangGraph · automated review"]
+        direction LR
+        Evidence["Retrieve evidence<br/>and published policy"] --> Analyst["Gemini analyst<br/>Cited findings"]
+        Analyst --> Reviewer["Independent reviewer<br/>Citation + reasoning checks"]
+        Reviewer -->|"Revise · up to 2 times"| Analyst
+    end
+    Review -->|"Escalate / limit reached"| Escalated["Escalated for investigation"]
+    Review -->|Pass| Human["Publish proposal + pause<br/>Independent human decision"]
+    Human -->|Approve| Action["Validate approval<br/>Record internal disposition"]
+    Human -->|Reject| Rejected["Record rejection"]
+
+    classDef step fill:#f4f4f5,stroke:#a1a1aa,color:#18181b
+    classDef human fill:#3f3f46,stroke:#27272a,color:#ffffff
+    classDef outcome fill:#fafafa,stroke:#a1a1aa,color:#3f3f46
+    class Intake,Evidence,Analyst,Reviewer step
+    class Human human
+    class Action,Rejected,Escalated outcome
+    style Review fill:#ffffff,stroke:#d4d4d8,color:#52525b
 ```
 
-The reviewer can request up to two revisions. A successful model review moves the case to **Needs approval**; it does not approve the case. The case creator and requesting analyst cannot make the final decision, even if they have an administrator role.
+LangGraph checkpoints the workflow and resumes it after a persisted human decision. The reviewer can request up to two revisions by default. A successful model review moves the case to **Needs approval**; it does not approve the case. The case creator and requesting analyst cannot make the final decision, even if they have an administrator role.
 
 Approved actions record an **internal case disposition**, such as resolution or a request for more information. The application does not execute payments, open accounts, or send external messages.
+
+## Agents and their tools
+
+LangGraph controls service calls and supplies the retrieved evidence to two LangChain/Gemini chains. The analyst and reviewer return validated responses; database changes and approval checks belong to the workflow.
+
+| Component | Tools and services it uses | Responsibility |
+| --- | --- | --- |
+| **Evidence retrieval** | `DocumentService.search` · Gemini embeddings · pgvector + lexical search | Retrieve this case's evidence and the tenant's published policies. |
+| **Case analyst** | LangChain prompt · Gemini · structured `Analysis` output | Turn the evidence snapshot into cited findings and a proposed internal disposition. |
+| **Independent reviewer** | `citation_errors` checks · Gemini · structured `Review` output · optional A2A `remote_review` | Return **pass**, **revise**, or **escalate** after evidence and citation checks. |
+| **Approval and action** | LangGraph `interrupt` / `Command` · `proposal_hash` · `apply_action` | Resume after an independent human decision and record an authorized outcome once. |
+
+**Optional MCP tools:** `read_case` inspects a case, `search_evidence` retrieves passages, `request_review` starts a review, and `retry_approved_action` retries an already approved action. These tools serve external MCP clients through the authorized API. The built-in workflow calls Python services directly; its Gemini chains have no business-action tools attached. [Implementation details →](docs/ARCHITECTURE.md#agents-and-tool-boundaries)
 
 ## Getting started
 

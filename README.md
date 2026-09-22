@@ -6,7 +6,7 @@ Doci turns uploaded documents and review policies into cited findings, an indepe
 
 **Python · FastAPI · React · TypeScript · LangChain · LangGraph · LangSmith · Google Cloud**
 
-[Getting started](#getting-started) · [Using the workspace](#using-the-workspace) · [Architecture](docs/ARCHITECTURE.md) · [GCP deployment](docs/DEPLOYMENT.md) · [Operational scope](docs/OPERATIONS.md)
+[Getting started](#getting-started) · [Using the workspace](#using-the-workspace) · [Architecture](docs/ARCHITECTURE.md) · [GCP deployment](docs/DEPLOYMENT.md) · [Monitoring](docs/OBSERVABILITY.md) · [Operational scope](docs/OPERATIONS.md)
 
 ## What you can do
 
@@ -16,7 +16,7 @@ Doci turns uploaded documents and review policies into cited findings, an indepe
 - **Use independent review:** a second model chain checks the analyst's reasoning and citations.
 - **Keep decisions accountable:** an authorized person approves or rejects the exact proposal with a recorded rationale.
 - **Recover interrupted work:** durable checkpoints, authenticated task delivery, and idempotent action records support retries.
-- **Observe the workflow:** optional LangSmith tracing and Google Cloud logging, monitoring, and traces support operations.
+- **Monitor production:** privacy-filtered LangSmith traces, review feedback, a 14-chart GCP dashboard, readiness checks, and operational incident policies support day-to-day operations.
 
 The interface uses neutral gray surfaces, readable text, visible focus states, and layouts that adapt to smaller screens.
 
@@ -122,18 +122,18 @@ In local development, select the reviewer role to publish a policy, the analyst 
 
 ## Technology and architecture
 
-| Layer           | Implementation                                                         |
-| --------------- | ---------------------------------------------------------------------- |
-| Web workspace   | React, TypeScript, Vite                                                |
-| Application API | Python, FastAPI, Pydantic, SQLAlchemy                                  |
-| Agent chains    | LangChain with structured Gemini output                                |
-| Workflow        | LangGraph with durable checkpoints and approval interrupts             |
-| Observability   | Optional LangSmith traces, OpenTelemetry, Cloud Logging and Monitoring |
-| Retrieval       | Gemini embeddings, pgvector, lexical ranking, and tenant/case filters  |
-| Persistence     | Cloud SQL for records and checkpoints; Cloud Storage for documents     |
-| Background work | Cloud Tasks and Cloud Run Jobs                                         |
-| Authentication  | Identity Platform, trusted role claims, IAM service identities         |
-| Infrastructure  | Terraform, Cloud Build, Artifact Registry, Cloud Run                   |
+| Layer           | Implementation                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| Web workspace   | React, TypeScript, Vite                                                                          |
+| Application API | Python, FastAPI, Pydantic, SQLAlchemy                                                            |
+| Agent chains    | LangChain with structured Gemini output                                                          |
+| Workflow        | LangGraph with durable checkpoints and approval interrupts                                       |
+| Observability   | LangSmith traces and feedback, OpenTelemetry, structured logs, dashboards, and incident policies |
+| Retrieval       | Gemini embeddings, pgvector, lexical ranking, and tenant/case filters                            |
+| Persistence     | Cloud SQL for records and checkpoints; Cloud Storage for documents                               |
+| Background work | Cloud Tasks and Cloud Run Jobs                                                                   |
+| Authentication  | Identity Platform, trusted role claims, IAM service identities                                   |
+| Infrastructure  | Terraform, Cloud Build, Artifact Registry, Cloud Run                                             |
 
 The API and frontend share one Cloud Run service. Optional integrations include MCP tools, a private A2A reviewer service, and Neo4j relationship retrieval. See the [architecture guide](docs/ARCHITECTURE.md) for component boundaries and data flow.
 
@@ -151,9 +151,17 @@ Use `cloudbuild.bootstrap.yaml` for an initial image build and `cloudbuild.yaml`
 
 Production configuration requires Firebase authentication, Vertex AI, PostgreSQL checkpoints, Cloud Storage, and Cloud Tasks. Custom-domain deployments restrict Cloud Run ingress to the load balancer and internal traffic.
 
-## LangSmith and evaluation
+## Observability and production monitoring
 
-LangSmith tracing is opt-in. Configure `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT` through your deployment's secret-management process. Inputs and outputs are hidden by default.
+Administrators can open **Monitoring** in the workspace to access LangSmith and the GCP production dashboard. Newly traced cases include a direct link to their latest execution trace.
+
+LangSmith captures graph/model timing, token usage, review correlation, and numeric citation/reviewer feedback while withholding document inputs, outputs, serialized payloads, and exception bodies. Execution and approval-resumption traces share a review ID. Human waiting time is excluded from execution latency; model cost estimates depend on available LangSmith pricing.
+
+Terraform provisions a 14-chart dashboard, log-based metrics, multi-region readiness checks, and incident policies for server errors, workflow failures, trace delivery, slow reviews, and task backlog. Notification channels are optional; an empty list keeps incidents in the console only.
+
+Configure `enable_langsmith`, a **Secret Manager secret ID/version**, the LangSmith project/region/workspace, and sampling settings in your private deployment configuration. The API key value is not stored in Terraform variables or committed code. See the [observability guide](docs/OBSERVABILITY.md) for setup, thresholds, privacy boundaries, and recovery steps.
+
+## Evaluation
 
 Evaluation records stay outside the repository. Print the required schema, then provide your own private JSON dataset:
 
@@ -195,7 +203,7 @@ terraform -chdir=infra validate
 terraform -chdir=infra fmt -check
 ```
 
-The test suite covers role enforcement, tenant isolation, document validation, citations, approval separation, replay safety, recovery, dataset import boundaries, and A2A behavior. PostgreSQL integration runs when `TEST_POSTGRES_URL` points to a disposable pgvector database; CI provisions one automatically.
+The test suite covers role enforcement, tenant isolation, document validation, citations, approval separation, replay safety, recovery, dataset import boundaries, A2A behavior, trace privacy, and telemetry delivery failures. PostgreSQL integration runs when `TEST_POSTGRES_URL` points to a disposable pgvector database; CI provisions one automatically.
 
 For meaningful changes, run the applicable checks and update the relevant documentation. Keep private inputs and generated output out of commits.
 

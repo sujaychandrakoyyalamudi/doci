@@ -11,34 +11,35 @@ locals {
   "logging.googleapis.com", "iam.googleapis.com", "compute.googleapis.com", "apikeys.googleapis.com", "cloudresourcemanager.googleapis.com"])
   app_url      = "https://${var.name}-${data.google_project.current.number}.${var.region}.run.app"
   reviewer_url = "https://${var.name}-reviewer-${data.google_project.current.number}.${var.region}.run.app"
-  secrets = merge({
-
-    DATABASE_URL   = "postgresql+psycopg://doci:${random_password.database.result}@/doci?host=/cloudsql/${google_sql_database_instance.main.connection_name}",
+  secrets = {
+    DATABASE_URL   = "postgresql+psycopg://doci:${random_password.database.result}@/doci?host=/cloudsql/${google_sql_database_instance.main.connection_name}"
     CHECKPOINT_URL = "postgresql://doci:${random_password.database.result}@/doci?host=/cloudsql/${google_sql_database_instance.main.connection_name}"
-
-    }, var.enable_langsmith ? {
-    LANGSMITH_API_KEY = var.langsmith_api_key
-    } : {
-
-  })
+  }
   app_env = {
 
-    APP_ENV               = "production", MODEL_PROVIDER = "vertex", AUTH_MODE = "firebase",
-    GOOGLE_CLOUD_PROJECT  = var.project_id, GOOGLE_CLOUD_LOCATION = var.region,
-    GEMINI_MODEL          = var.gemini_model, GEMINI_LOCATION = var.gemini_location,
-    FIREBASE_API_KEY      = local.firebase_api_key,
-    FIREBASE_AUTH_DOMAIN  = var.firebase_auth_domain != "" ? var.firebase_auth_domain : "${var.project_id}.firebaseapp.com",
-    STORAGE_BACKEND       = "gcs", GCS_BUCKET = google_storage_bucket.documents.name,
-    QUEUE_BACKEND         = "cloud_tasks", CLOUD_TASKS_QUEUE = google_cloud_tasks_queue.reviews.name,
-    WORKER_URL            = local.app_url, TASK_SERVICE_ACCOUNT = google_service_account.tasks.email,
-    DOCUMENT_AI_PROCESSOR = var.enable_document_ai ? google_document_ai_processor.ocr[0].id : "",
-    DOCUMENT_AI_LOCATION  = var.document_ai_location, DATA_DIR = "/tmp/doci", CORS_ORIGINS = "[]",
-    LANGSMITH_TRACING     = tostring(var.enable_langsmith), LANGSMITH_PROJECT = var.name,
-    LANGSMITH_HIDE_INPUTS = "true", LANGSMITH_HIDE_OUTPUTS = "true",
-    REVIEWER_A2A_URL      = var.enable_a2a_reviewer ? local.reviewer_url : ""
-    SYNTHETIC_WORKSPACE   = tostring(var.synthetic_workspace)
-    DATABASE_POOL_SIZE    = tostring(var.database_pool_size)
-    DATABASE_MAX_OVERFLOW = tostring(var.database_max_overflow)
+    APP_ENV                   = "production", MODEL_PROVIDER = "vertex", AUTH_MODE = "firebase",
+    GOOGLE_CLOUD_PROJECT      = var.project_id, GOOGLE_CLOUD_LOCATION = var.region,
+    GEMINI_MODEL              = var.gemini_model, GEMINI_LOCATION = var.gemini_location,
+    FIREBASE_API_KEY          = local.firebase_api_key,
+    FIREBASE_AUTH_DOMAIN      = var.firebase_auth_domain != "" ? var.firebase_auth_domain : "${var.project_id}.firebaseapp.com",
+    STORAGE_BACKEND           = "gcs", GCS_BUCKET = google_storage_bucket.documents.name,
+    QUEUE_BACKEND             = "cloud_tasks", CLOUD_TASKS_QUEUE = google_cloud_tasks_queue.reviews.name,
+    WORKER_URL                = local.app_url, TASK_SERVICE_ACCOUNT = google_service_account.tasks.email,
+    DOCUMENT_AI_PROCESSOR     = var.enable_document_ai ? google_document_ai_processor.ocr[0].id : "",
+    DOCUMENT_AI_LOCATION      = var.document_ai_location, DATA_DIR = "/tmp/doci", CORS_ORIGINS = "[]",
+    LANGSMITH_TRACING         = tostring(var.enable_langsmith)
+    LANGSMITH_PROJECT         = var.langsmith_project != "" ? var.langsmith_project : "${var.name}-production"
+    LANGSMITH_ENDPOINT        = var.langsmith_endpoint
+    LANGSMITH_WORKSPACE_ID    = var.langsmith_workspace_id
+    LANGSMITH_PROJECT_URL     = var.langsmith_project_url
+    LANGSMITH_SAMPLING_RATE   = tostring(var.langsmith_sampling_rate)
+    CLOUD_TRACE_SAMPLING_RATE = tostring(var.cloud_trace_sampling_rate)
+    MONITORING_DASHBOARD_URL  = local.monitoring_enabled ? "https://console.cloud.google.com/monitoring/dashboards/builder/${basename(google_monitoring_dashboard.production[0].id)}?project=${var.project_id}" : ""
+    LANGSMITH_HIDE_INPUTS     = "true", LANGSMITH_HIDE_OUTPUTS = "true",
+    REVIEWER_A2A_URL          = var.enable_a2a_reviewer ? local.reviewer_url : ""
+    SYNTHETIC_WORKSPACE       = tostring(var.synthetic_workspace)
+    DATABASE_POOL_SIZE        = tostring(var.database_pool_size)
+    DATABASE_MAX_OVERFLOW     = tostring(var.database_max_overflow)
 
   }
 
@@ -323,6 +324,18 @@ resource "google_cloud_run_v2_service" "app" {
         }
 
       }
+      dynamic "env" {
+        for_each = var.enable_langsmith ? [var.langsmith_api_key_secret_id] : []
+        content {
+          name = "LANGSMITH_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = var.langsmith_secret_version
+            }
+          }
+        }
+      }
       startup_probe {
         http_get {
           path = "/readyz"
@@ -349,7 +362,7 @@ resource "google_cloud_run_v2_service" "app" {
     }
 
   }
-  depends_on = [google_secret_manager_secret_iam_member.app, google_project_iam_member.app,
+  depends_on = [google_secret_manager_secret_iam_member.app, google_secret_manager_secret_iam_member.langsmith, google_project_iam_member.app,
   google_sql_database.app, google_sql_user.app, google_secret_manager_secret_version.app]
 
 }
@@ -458,7 +471,7 @@ resource "google_cloud_run_v2_job" "reindex" {
           mount_path = "/cloudsql"
         }
         dynamic "env" {
-          for_each = local.app_env
+          for_each = merge(local.app_env, { LANGSMITH_TRACING = "false" })
           content {
             name  = env.key
             value = env.value
@@ -484,35 +497,5 @@ resource "google_cloud_run_v2_job" "reindex" {
     }
   }
   depends_on = [google_cloud_run_v2_service.app]
-
-}
-
-resource "google_monitoring_alert_policy" "api_errors" {
-
-  count        = var.deploy_app ? 1 : 0
-  display_name = "Doci elevated server errors"
-  combiner     = "OR"
-  conditions {
-
-    display_name = "Cloud Run 5xx rate"
-    condition_threshold {
-
-      filter          = "resource.type = \"cloud_run_revision\" AND resource.label.service_name = \"${var.name}\" AND metric.type = \"run.googleapis.com/request_count\" AND metric.label.response_code_class = \"5xx\""
-      comparison      = "COMPARISON_GT"
-      threshold_value = 0.1
-      duration        = "300s"
-      aggregations {
-        alignment_period     = "60s"
-        per_series_aligner   = "ALIGN_RATE"
-        cross_series_reducer = "REDUCE_SUM"
-      }
-
-    }
-
-  }
-  documentation {
-    content = "Inspect Cloud Logging and the failed review. Retry saved runs after resolving the root cause. Configure notification channels for your operations team."
-  }
-  depends_on = [google_project_service.apis]
 
 }

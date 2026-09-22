@@ -17,4 +17,4 @@ RUN useradd --create-home --uid 10001 doci && mkdir -p /app/.data && chown -R do
 USER doci
 ENV PORT=8080 DATA_DIR=/tmp/doci
 EXPOSE 8080
-CMD ["sh", "-c", "exec uvicorn doci.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]
+CMD ["sh", "-c", "exec uvicorn doci.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1 --no-access-log"]

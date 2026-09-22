@@ -54,3 +54,9 @@ The optional A2A reviewer receives only the evidence snapshot and proposal. It h
 The first version intentionally uses a modular Python service. The same Cloud Run container serves static frontend assets, public authenticated API routes, and an OIDC-protected task endpoint. Cloud Tasks provides durable delivery; an optional A2A reviewer runs in a separate private service. This avoids distributed write transactions while preserving the service boundaries in the design.
 
 Document parsing and embedding happen synchronously on upload. This keeps ingestion atomic for the initial version; large-volume ingestion should move to a dedicated task/worker before scaling. Reindexing has an operator-run Cloud Run Job.
+
+## Observability boundaries
+
+Production tracing uses a dedicated LangSmith client with content filtering, selected metadata, deterministic review sampling, and bounded flushes. Input/output bodies, serialized components, event content, and exception messages are withheld. Numeric usage metadata supports token and available cost reporting. Root traces use unique execution UUIDs, grouped by the stable review ID.
+
+Structured workflow and request events feed Cloud Logging metrics and a production dashboard. Request spans use route templates instead of raw paths or query values and are flushed before the final response byte. The monitoring API and console links are restricted to application administrators; cloud and LangSmith consoles retain their own authorization checks. See [observability](OBSERVABILITY.md).

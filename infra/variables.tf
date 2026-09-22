@@ -65,11 +65,6 @@ variable "enable_langsmith" {
   type    = bool
   default = false
 }
-variable "langsmith_api_key" {
-  type      = string
-  default   = ""
-  sensitive = true
-}
 variable "enable_a2a_reviewer" {
   type    = bool
   default = false

@@ -14,6 +14,16 @@ export type Actor = {
   role: string;
   name: string;
 };
+export type Monitoring = {
+  langsmith_enabled: boolean;
+  langsmith_project: string;
+  langsmith_project_url: string;
+  sampling_rate: number;
+  content_hidden: boolean;
+  dashboard_url: string;
+  environment: string;
+  release: string;
+};
 export type Case = {
   id: string;
   reference: string;
@@ -70,6 +80,7 @@ export type Run = {
   revision: number;
   error: string | null;
   trace_id: string;
+  trace_url?: string | null;
   proposal_hash: string;
 };
 export type Event = {

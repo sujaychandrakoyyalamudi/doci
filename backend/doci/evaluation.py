@@ -63,7 +63,7 @@ def main():
         model_provider="vertex" if args.vertex else "demo",
         langsmith_tracing=args.langsmith,
     )
-    configure(settings)
+    telemetry = configure(settings)
     agents = Agents(settings)
 
     def target(inputs):
@@ -81,16 +81,26 @@ def main():
         }
 
     if args.langsmith:
-        from langsmith import Client
         from langsmith.evaluation import evaluate
 
         digest = hashlib.sha256(json.dumps(cases, sort_keys=True).encode()).hexdigest()[:12]
         name = f"doci-review-{digest}"
-        client = Client()
-        if not client.has_dataset(dataset_name=name):
-            dataset = client.create_dataset(name, description="Operator-supplied review evaluation")
-            client.create_examples(dataset_id=dataset.id, examples=cases)
-        evaluate(target, data=name, evaluators=[correct_verdict], experiment_prefix="doci-review")
+        client = telemetry.client
+        try:
+            if not client.has_dataset(dataset_name=name):
+                dataset = client.create_dataset(
+                    name, description="Operator-supplied review evaluation"
+                )
+                client.create_examples(dataset_id=dataset.id, examples=cases)
+            evaluate(
+                target,
+                data=name,
+                evaluators=[correct_verdict],
+                experiment_prefix="doci-review",
+                client=client,
+            )
+        finally:
+            telemetry.shutdown()
     else:
         # Report numeric indexes, not document text or case titles.
         results = [

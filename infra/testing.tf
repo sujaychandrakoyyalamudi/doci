@@ -37,6 +37,18 @@ resource "google_cloud_run_v2_job" "seed_testing" {
           }
         }
         dynamic "env" {
+          for_each = var.enable_langsmith ? [var.langsmith_api_key_secret_id] : []
+          content {
+            name = "LANGSMITH_API_KEY"
+            value_source {
+              secret_key_ref {
+                secret  = env.value
+                version = var.langsmith_secret_version
+              }
+            }
+          }
+        }
+        dynamic "env" {
           for_each = google_secret_manager_secret.app
           content {
             name = env.key

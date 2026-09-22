@@ -1,4 +1,5 @@
 import logging
+import time
 from contextlib import contextmanager
 from typing import TypedDict
 from uuid import UUID
@@ -7,6 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from sqlalchemy import select
 
+from doci import observability
 from doci.agents import Agents, citation_errors
 from doci.config import Settings
 from doci.db import Database
@@ -34,9 +36,12 @@ class State(TypedDict, total=False):
 
 
 class Workflow:
-    def __init__(self, settings: Settings, db: Database, documents: DocumentService):
+    def __init__(
+        self, settings: Settings, db: Database, documents: DocumentService, *, telemetry=None
+    ):
         self.settings, self.db, self.documents = settings, db, documents
         self.agents = Agents(settings)
+        self.telemetry = telemetry or observability.configure(settings)
 
     @contextmanager
     def checkpointer(self):
@@ -80,6 +85,7 @@ class Workflow:
                         dedupe_key=dedupe_key,
                     )
                 )
+        observability.event("workflow.step", review_id=state["run_id"], step=step)
 
     def gather_evidence(self, state: State):
         self.record(state, "evidence", status="processing")
@@ -236,6 +242,7 @@ class Workflow:
     def execute(self, run_id: str, raise_errors: bool = False):
         with self.db.workflow_lock(run_id) as acquired:
             if not acquired:
+                observability.event("workflow.skipped", review_id=run_id, reason="locked")
                 if raise_errors:
                     raise RuntimeError("This run is being processed; retry later")
                 return
@@ -272,7 +279,65 @@ class Workflow:
                         trace_id = uid()
                         with self.db.session.begin() as session:
                             session.get(Run, run_id).trace_id = trace_id
-                        return graph.invoke(value, {**config, "run_id": UUID(trace_id)})
+                        started = time.perf_counter()
+                        duration_ms = None
+                        status = "failed"
+                        with self.telemetry.span(
+                            "workflow.execute",
+                            {"doci.review_id": run_id, "doci.trace_id": trace_id},
+                        ) as workflow_span:
+                            with self.telemetry.review_trace(run_id, trace_id) as (
+                                trace_config,
+                                sampled,
+                            ):
+                                if sampled:
+                                    with self.db.session.begin() as session:
+                                        session.add(
+                                            AuditEvent(
+                                                tenant_id=initial["tenant_id"],
+                                                case_id=initial["case_id"],
+                                                run_id=run_id,
+                                                actor="observability",
+                                                event="observability.trace_started",
+                                                detail=f"Trace reference: {trace_id}",
+                                                dedupe_key=f"trace:{trace_id}",
+                                            )
+                                        )
+                                try:
+                                    result = graph.invoke(
+                                        value, {**config, **trace_config, "run_id": UUID(trace_id)}
+                                    )
+                                    status = result.get("outcome") or (
+                                        "awaiting_approval"
+                                        if result.get("__interrupt__")
+                                        else "processing"
+                                    )
+                                    duration_ms = round((time.perf_counter() - started) * 1000, 3)
+                                    if sampled:
+                                        try:
+                                            self.telemetry.feedback(trace_id, result)
+                                        except Exception as exc:
+                                            self.telemetry.delivery_error(exc)
+                                    return result
+                                finally:
+                                    if workflow_span:
+                                        from opentelemetry.trace import Status, StatusCode
+
+                                        workflow_span.set_attribute("doci.status", status)
+                                        if status == "failed":
+                                            workflow_span.set_status(Status(StatusCode.ERROR))
+                                    observability.event(
+                                        "workflow.execution_finished",
+                                        review_id=run_id,
+                                        trace_id=trace_id,
+                                        status=status,
+                                        sampled=sampled,
+                                        duration_ms=duration_ms
+                                        if duration_ms is not None
+                                        else round((time.perf_counter() - started) * 1000, 3),
+                                    )
+                                    if sampled:
+                                        self.telemetry.flush()
 
                     snapshot = graph.get_state(config)
                     if not snapshot.values:
@@ -296,7 +361,12 @@ class Workflow:
                     self.record(initial, "complete", status=outcome)
             except Exception as exc:
                 # Do not log exception bodies: provider errors may contain document text.
-                logger.error("Workflow failed run=%s exception_type=%s", run_id, type(exc).__name__)
+                observability.event(
+                    "workflow.failed",
+                    level=logging.ERROR,
+                    review_id=run_id,
+                    exception_type=type(exc).__name__,
+                )
                 with self.db.session.begin() as session:
                     run = session.get(Run, run_id)
                     if run:

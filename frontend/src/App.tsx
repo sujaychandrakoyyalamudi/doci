@@ -18,6 +18,7 @@ import {
   Files,
   FileText,
   FolderOpen,
+  Gauge,
   HelpCircle,
   LayoutDashboard,
   LoaderCircle,
@@ -50,9 +51,16 @@ import type {
   Document,
   Event,
   Evidence,
+  Monitoring,
 } from "./types";
 
-type Page = "Overview" | "All cases" | "Documents" | "Approvals" | "Activity";
+type Page =
+  | "Overview"
+  | "All cases"
+  | "Documents"
+  | "Approvals"
+  | "Activity"
+  | "Monitoring";
 const editable = [
   "draft",
   "rejected",
@@ -77,6 +85,7 @@ const icons = {
   Documents: Files,
   Approvals: ShieldCheck,
   Activity,
+  Monitoring: Gauge,
 };
 const date = (value: string) =>
   new Date(
@@ -468,6 +477,7 @@ function Workspace({
         <p className="nav-label">WORKSPACE</p>
         <nav>
           {(Object.keys(icons) as Page[]).map((item) => {
+            if (item === "Monitoring" && actor?.role !== "admin") return null;
             const Icon = icons[item];
             return (
               <button
@@ -630,9 +640,11 @@ function Workspace({
                         ? "Your judgment makes it final."
                         : page === "Documents"
                           ? "Evidence, all in one place."
-                          : page === "Activity"
-                            ? "An accountable trail."
-                            : "Keep every case moving."}
+                          : page === "Monitoring"
+                            ? "Understand every review."
+                            : page === "Activity"
+                              ? "An accountable trail."
+                              : "Keep every case moving."}
                   </h1>
                   <p>
                     {page === "Overview"
@@ -641,17 +653,22 @@ function Workspace({
                         ? "Independently reviewed recommendations, ready for a human decision."
                         : page === "Documents"
                           ? "Source documents and published policies that ground each review."
-                          : page === "Activity"
-                            ? "Follow each document, agent review, and human decision."
-                            : "From the first document to the final decision, nothing gets lost."}
+                          : page === "Monitoring"
+                            ? "Follow agent performance, service health, and operational alerts."
+                            : page === "Activity"
+                              ? "Follow each document, agent review, and human decision."
+                              : "From the first document to the final decision, nothing gets lost."}
                   </p>
                 </div>
-                {canCreate && page !== "Activity" && page !== "Documents" && (
-                  <Button kind="primary" onClick={() => setNewCase(true)}>
-                    <Plus size={17} />
-                    New case
-                  </Button>
-                )}
+                {canCreate &&
+                  page !== "Activity" &&
+                  page !== "Documents" &&
+                  page !== "Monitoring" && (
+                    <Button kind="primary" onClick={() => setNewCase(true)}>
+                      <Plus size={17} />
+                      New case
+                    </Button>
+                  )}
               </div>
               {(config.model_provider === "demo" ||
                 config.synthetic_workspace) && (
@@ -939,6 +956,9 @@ function Workspace({
                   <EventList events={events} open={openCase} />
                 </section>
               )}
+              {page === "Monitoring" && actor?.role === "admin" && (
+                <MonitoringPage />
+              )}
             </>
           )}
           <footer className="page-footer">
@@ -1028,6 +1048,134 @@ function Workspace({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function MonitoringPage() {
+  const [status, setStatus] = useState<Monitoring | null>(null);
+  const [error, setError] = useState("");
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setError("");
+    api<Monitoring>("/monitoring")
+      .then((result) => {
+        if (active) setStatus(result);
+      })
+      .catch(() => {
+        if (active)
+          setError("Monitoring settings could not be loaded. Try again.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [version]);
+  if (error)
+    return (
+      <div role="alert" className="error-box">
+        {error}
+        <Button onClick={() => setVersion(version + 1)}>Try again</Button>
+      </div>
+    );
+  if (!status)
+    return (
+      <div className="loading">
+        <LoaderCircle className="spin" />
+        Loading monitoring…
+      </div>
+    );
+  return (
+    <div className="monitoring-page">
+      <div className="monitoring-grid">
+        <section className="panel monitoring-card">
+          <div className="heading-with-icon">
+            <Workflow size={22} />
+            <h2>Agent observability</h2>
+          </div>
+          <p>
+            Inspect each review's graph steps, model calls, latency, token
+            usage, and review feedback in LangSmith.
+          </p>
+          <dl>
+            <dt>Tracing configuration</dt>
+            <dd>{status.langsmith_enabled ? "Enabled" : "Disabled"}</dd>
+            <dt>Project</dt>
+            <dd>{status.langsmith_project}</dd>
+            <dt>Review sampling</dt>
+            <dd>
+              {status.langsmith_enabled
+                ? `${Math.round(status.sampling_rate * 100)}%`
+                : "Off"}
+            </dd>
+            <dt>Document content</dt>
+            <dd>{status.content_hidden ? "Hidden from traces" : "Visible"}</dd>
+          </dl>
+          {status.langsmith_enabled && status.langsmith_project_url ? (
+            <a
+              className="button primary"
+              href={status.langsmith_project_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open LangSmith <ArrowUpRight size={16} />
+            </a>
+          ) : (
+            <p className="form-hint">
+              LangSmith must be configured by your deployment administrator.
+            </p>
+          )}
+        </section>
+        <section className="panel monitoring-card">
+          <div className="heading-with-icon">
+            <Gauge size={22} />
+            <h2>Production health</h2>
+          </div>
+          <p>
+            Follow request errors, review execution time, task backlog,
+            infrastructure health, and trace delivery failures.
+          </p>
+          <dl>
+            <dt>Environment</dt>
+            <dd>{status.environment}</dd>
+            <dt>Deployed revision</dt>
+            <dd className="mono">{status.release}</dd>
+            <dt>Availability</dt>
+            <dd>HTTPS and database readiness checks</dd>
+            <dt>Alert status</dt>
+            <dd>See Cloud Monitoring incidents</dd>
+          </dl>
+          {status.dashboard_url ? (
+            <a
+              className="button primary"
+              href={status.dashboard_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open production dashboard <ArrowUpRight size={16} />
+            </a>
+          ) : (
+            <p className="form-hint">
+              The production dashboard is available after GCP monitoring is
+              configured.
+            </p>
+          )}
+        </section>
+      </div>
+      <section className="panel monitoring-card">
+        <h2>Find a review's trace</h2>
+        <p>
+          Open a case and use <strong>Open trace in LangSmith</strong> beneath
+          its trace reference. Each execution or resumption has its own trace;
+          the review ID groups them together.
+        </p>
+        <p className="form-hint">
+          Monitoring access requires the appropriate LangSmith or Google Cloud
+          account. Tracing configuration does not certify exporter health; check
+          delivery failures in the production dashboard. Review latency excludes
+          time waiting for a human decision.
+        </p>
+      </section>
     </div>
   );
 }
@@ -1940,6 +2088,16 @@ function CaseDetail({
               <div className="trace-reference">
                 <span>Trace reference</span>
                 <code title={run.trace_id}>{run.trace_id.slice(0, 18)}…</code>
+                {run.trace_url && (
+                  <a
+                    className="text-button"
+                    href={run.trace_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open trace in LangSmith <ArrowUpRight size={14} />
+                  </a>
+                )}
               </div>
             )}
           </section>

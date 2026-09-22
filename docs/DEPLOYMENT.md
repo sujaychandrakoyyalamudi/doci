@@ -76,7 +76,7 @@ If certificate validation failed before DNS was configured, first verify all dom
 
 ## 4. Optional services
 
-- **LangSmith:** set `enable_langsmith=true` and supply `langsmith_api_key` through protected Terraform input. The API runtime reads it from Secret Manager. Inputs and outputs remain hidden by default. Configure any separate reviewer tracing independently if required.
+- **LangSmith:** set `enable_langsmith=true` and supply `langsmith_api_key_secret_id` plus its version, project, endpoint, and workspace configuration. Create the key version directly in Secret Manager; no key value enters Terraform inputs or state. See [observability setup](OBSERVABILITY.md). Configure any separate reviewer tracing independently if required.
 - **Separate reviewer:** set `enable_a2a_reviewer=true`. Terraform creates a private Cloud Run service and gives only the API identity invocation rights. It uses the official A2A SDK. Do not grant public invocation to the reviewer.
 - **Document AI:** the OCR processor defaults to the `us` processor location. Text PDFs do not need OCR. Scanned/mixed PDFs require OCR and are subject to the processor's synchronous page limits, which can be lower than the application's 100-page text-PDF limit.
 - **Neo4j:** use an existing managed Neo4j database and inject its configuration through your secret-management process. The Terraform module does not provision Neo4j. Relationship indexing is optional and SQL retrieval works when it is unavailable.
@@ -105,7 +105,7 @@ gcloud run jobs execute doci-reindex --project YOUR_PROJECT --region us-central1
 
 Reindexing replaces stored embeddings in batches. Keep the configured embedding model stable while it runs; use a maintenance window or a versioned index for online migrations.
 
-Cloud Run emits structured logs and OpenTelemetry traces. A Cloud Monitoring policy flags sustained server errors; connect your operations team's notification channels before relying on alerts. After deployment, perform a real-project smoke test covering sign-in, text and scanned uploads, model access, task delivery, restart recovery, and independent human approval.
+Cloud Run emits structured logs and sampled OpenTelemetry traces. The production dashboard and incident policies cover application, workflow, queue, trace-delivery, and readiness signals. Notification channels are optional; leave the channel list empty for console-only monitoring. See [the observability guide](OBSERVABILITY.md). After deployment, perform a real-project smoke test covering sign-in, text and scanned uploads, model access, task delivery, restart recovery, and independent human approval.
 
 ## Private evaluation datasets
 

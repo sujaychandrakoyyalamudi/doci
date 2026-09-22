@@ -2,6 +2,7 @@ import json
 
 from fastapi import BackgroundTasks
 
+from doci import observability
 from doci.config import Settings
 from doci.models import uid
 
@@ -13,6 +14,7 @@ class Queue:
     def dispatch(self, run_id: str, background: BackgroundTasks):
         if self.settings.queue_backend == "local":
             background.add_task(self.workflow.execute, run_id)
+            observability.event("queue.dispatched", review_id=run_id, provider="local")
             return
         from google.cloud import tasks_v2
         from google.protobuf import duration_pb2
@@ -43,3 +45,4 @@ class Queue:
                 },
             }
         )
+        observability.event("queue.dispatched", review_id=run_id, provider="cloud_tasks")

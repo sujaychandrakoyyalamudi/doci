@@ -40,7 +40,7 @@ ApproverDep = Annotated[Actor, Depends(require_roles("approver"))]
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
-    observability.configure(settings)
+    telemetry = observability.configure(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -49,7 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.initialize()
         logging.getLogger("doci.startup").info("Application database ready; initializing agents")
         documents = DocumentService(settings, db)
-        workflow = Workflow(settings, db, documents)
+        workflow = Workflow(settings, db, documents, telemetry=telemetry)
         logging.getLogger("doci.startup").info("Initializing workflow checkpoints")
         workflow.initialize()
         logging.getLogger("doci.startup").info("Application startup complete")
@@ -60,10 +60,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             documents=documents,
             workflow=workflow,
             queue=Queue(settings, workflow),
+            telemetry=telemetry,
         )
         app.state.services = services
-        yield
-        db.close()
+        try:
+            yield
+        finally:
+            try:
+                telemetry.shutdown()
+            finally:
+                db.close()
 
     app = FastAPI(
         title="Doci · Document Review & Case Resolution", version="0.1.0", lifespan=lifespan
@@ -75,7 +81,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["Authorization", "Content-Type", "X-Demo-Role"],
     )
-    observability.instrument(app, settings)
     app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_upload_bytes + 65536)
 
     @app.middleware("http")
@@ -97,8 +102,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             services.queue.dispatch(run_id, background)
         except Exception as exc:
-            logging.getLogger("doci.queue").error(
-                "Dispatch failed run=%s type=%s", run_id, type(exc).__name__
+            observability.event(
+                "queue.dispatch_failed",
+                level=logging.ERROR,
+                review_id=run_id,
+                exception_type=type(exc).__name__,
             )
             raise HTTPException(
                 503, "Review saved but queue dispatch failed. Use Retry to dispatch the saved run."
@@ -131,6 +139,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def me(actor: ActorDep):
         return actor
 
+    @app.get("/api/monitoring")
+    def monitoring(actor: Annotated[Actor, Depends(require_roles("admin"))]):
+        return telemetry.status()
+
     @app.get("/api/cases")
     def list_cases(request: Request, actor: ActorDep):
         return svc(request).repo.list_cases(actor.tenant_id)
@@ -141,7 +153,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/cases/{case_id}")
     def case_detail(case_id: str, request: Request, actor: ActorDep):
-        return svc(request).repo.case_detail(case_id, actor.tenant_id)
+        detail = svc(request).repo.case_detail(case_id, actor.tenant_id)
+        if detail.get("run"):
+            run = detail["run"]
+            traced = any(
+                event["event"] == "observability.trace_started"
+                and event["detail"] == f"Trace reference: {run['trace_id']}"
+                for event in detail["events"]
+            )
+            run["trace_url"] = (
+                telemetry.run_url(run["id"], run["trace_id"])
+                if actor.role == "admin" and traced
+                else None
+            )
+        return detail
 
     @app.post("/api/cases/{case_id}/reviews", status_code=202)
     def start_review(
@@ -162,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ):
         services = svc(request)
         decision = services.repo.decide(actor, run_id, data)
+        observability.event("review.human_decision", review_id=run_id, outcome=data.decision)
         dispatch(services, run_id, background)
         return serialize(decision)
 
@@ -250,8 +276,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def frontend(path: str):
             if path.startswith(("api/", "healthz", "readyz")):
                 raise HTTPException(404, "Not found")
-            return FileResponse(static / "index.html")
+            return FileResponse(static / "index.html", headers={"Cache-Control": "no-cache"})
 
+    telemetry.instrument(app)
     return app
 
 
